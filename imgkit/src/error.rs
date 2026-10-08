@@ -71,9 +71,9 @@ mod error_tests {
 
 #[cfg(test)]
 mod decode_tests {
-    use crate::Image;
+    use crate::{Image, Rgb};
 
-    fn decode(bytes: &[u8]) -> Image {
+    fn decode(bytes: &[u8]) -> Image<Rgb<u8>> {
         Image::decode_pnm(bytes).unwrap()
     }
 
@@ -82,7 +82,7 @@ mod decode_tests {
         let mut img = Image::new(5, 3);
         for y in 0..3 {
             for x in 0..5 {
-                img.set_pixel(x, y, [x as u8 * 50, y as u8 * 100, 7]);
+                img[(x, y)] = [x as u8 * 50, y as u8 * 100, 7];
             }
         }
         let mut file = Vec::new();
@@ -93,7 +93,7 @@ mod decode_tests {
     #[test]
     fn saved_file_loads_back() {
         let mut img = Image::new(3, 2);
-        img.set_pixel(2, 1, [1, 2, 3]);
+        img[(2, 1)] = [1, 2, 3];
         let path = std::env::temp_dir().join(format!("imgkit-load-{}.ppm", std::process::id()));
         img.save_ppm(&path).unwrap();
         let loaded = Image::load_pnm(&path);
@@ -106,8 +106,8 @@ mod decode_tests {
         let img = decode(b"P3\n2 1\n255\n255 0 0   0 128 255\n");
         assert_eq!(img.width(), 2);
         assert_eq!(img.height(), 1);
-        assert_eq!(img.get_pixel(0, 0), [255, 0, 0]);
-        assert_eq!(img.get_pixel(1, 0), [0, 128, 255]);
+        assert_eq!(img[(0, 0)], [255, 0, 0]);
+        assert_eq!(img[(1, 0)], [0, 128, 255]);
     }
 
     #[test]
@@ -115,9 +115,9 @@ mod decode_tests {
         let plain = decode(b"P2\n3 1\n255\n0 128 255\n");
         let binary = decode(b"P5\n3 1\n255\n\x00\x80\xff");
         for img in [plain, binary] {
-            assert_eq!(img.get_pixel(0, 0), [0, 0, 0]);
-            assert_eq!(img.get_pixel(1, 0), [128, 128, 128]);
-            assert_eq!(img.get_pixel(2, 0), [255, 255, 255]);
+            assert_eq!(img[(0, 0)], [0, 0, 0]);
+            assert_eq!(img[(1, 0)], [128, 128, 128]);
+            assert_eq!(img[(2, 0)], [255, 255, 255]);
         }
     }
 
@@ -128,7 +128,7 @@ mod decode_tests {
         );
         assert_eq!(img.width(), 2);
         assert_eq!(img.height(), 1);
-        assert_eq!(img.get_pixel(1, 0), [4, 5, 6]);
+        assert_eq!(img[(1, 0)], [4, 5, 6]);
     }
 
     #[test]
@@ -136,31 +136,31 @@ mod decode_tests {
         // Exactly one whitespace byte ends the header. The newline, space,
         // tab and carriage return after it are samples 10, 32, 9 and 13.
         let img = decode(b"P6\n2 1\n255\n\n \t\r\n\n");
-        assert_eq!(img.get_pixel(0, 0), [10, 32, 9]);
-        assert_eq!(img.get_pixel(1, 0), [13, 10, 10]);
+        assert_eq!(img[(0, 0)], [10, 32, 9]);
+        assert_eq!(img[(1, 0)], [13, 10, 10]);
     }
 
     #[test]
     fn a_comment_after_the_delimiter_is_pixel_data() {
         // The space after the maxval ends the header, so "#!" is two samples.
         let img = decode(b"P5\n2 1\n255 #!");
-        assert_eq!(img.get_pixel(0, 0), [b'#', b'#', b'#']);
-        assert_eq!(img.get_pixel(1, 0), [b'!', b'!', b'!']);
+        assert_eq!(img[(0, 0)], [b'#', b'#', b'#']);
+        assert_eq!(img[(1, 0)], [b'!', b'!', b'!']);
     }
 
     #[test]
     fn other_maxvals_are_scaled_with_rounding() {
         // 255 * s / 1000 for s = 0, 1, 2, 500, 1000 is 0, 0.255, 0.51, 127.5, 255.
         let img = decode(b"P2\n5 1\n1000\n0 1 2 500 1000\n");
-        assert_eq!(img.get_pixel(0, 0), [0, 0, 0]);
-        assert_eq!(img.get_pixel(1, 0), [0, 0, 0]);
-        assert_eq!(img.get_pixel(2, 0), [1, 1, 1]);
-        assert_eq!(img.get_pixel(3, 0), [128, 128, 128]);
-        assert_eq!(img.get_pixel(4, 0), [255, 255, 255]);
+        assert_eq!(img[(0, 0)], [0, 0, 0]);
+        assert_eq!(img[(1, 0)], [0, 0, 0]);
+        assert_eq!(img[(2, 0)], [1, 1, 1]);
+        assert_eq!(img[(3, 0)], [128, 128, 128]);
+        assert_eq!(img[(4, 0)], [255, 255, 255]);
 
         let img = decode(b"P2\n2 1\n1\n0 1\n");
-        assert_eq!(img.get_pixel(0, 0), [0, 0, 0]);
-        assert_eq!(img.get_pixel(1, 0), [255, 255, 255]);
+        assert_eq!(img[(0, 0)], [0, 0, 0]);
+        assert_eq!(img[(1, 0)], [255, 255, 255]);
     }
 
     #[test]
@@ -168,10 +168,10 @@ mod decode_tests {
         // 0x1234 = 4660 -> 18.13 -> 18. Read little-endian, 0x3412 would give 52.
         // 0x00ff = 255 -> 0.99 -> 1, and 0x8000 = 32768 -> 127.50 -> 128.
         let img = decode(b"P6\n1 1\n65535\n\x12\x34\x00\xff\x80\x00");
-        assert_eq!(img.get_pixel(0, 0), [18, 1, 128]);
+        assert_eq!(img[(0, 0)], [18, 1, 128]);
 
         let img = decode(b"P3\n1 1\n65535\n65535 32768 0\n");
-        assert_eq!(img.get_pixel(0, 0), [255, 128, 0]);
+        assert_eq!(img[(0, 0)], [255, 128, 0]);
     }
 
     #[test]
@@ -185,14 +185,14 @@ mod decode_tests {
         }
         let img = decode(&file);
         for v in 0..=255u8 {
-            assert_eq!(img.get_pixel(usize::from(v), 0), [v, v, v]);
+            assert_eq!(img[(usize::from(v), 0)], [v, v, v]);
         }
     }
 
     #[test]
     fn data_after_the_first_image_is_ignored() {
         let img = decode(b"P5\n1 1\n255\n\x07P5\n1 1\n255\n\x08");
-        assert_eq!(img.get_pixel(0, 0), [7, 7, 7]);
+        assert_eq!(img[(0, 0)], [7, 7, 7]);
     }
 }
 

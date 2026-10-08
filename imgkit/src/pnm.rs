@@ -4,59 +4,13 @@ use std::{
     path::Path,
 };
 
-use crate::{
-    Image,
-    error::ImageError::{self},
-};
+use crate::{Image, Rgb, error::ImageError};
 
-impl Image {
-    /// Create a black image of the given size.
-    pub fn new(width: usize, height: usize) -> Self {
-        Self {
-            width,
-            height,
-            data: vec![0; width * height * 3],
-        }
-    }
-
-    pub fn width(&self) -> usize {
-        self.width
-    }
-
-    pub fn height(&self) -> usize {
-        self.height
-    }
-
-    /// Returns the `[r, g, b]` color of the pixel at column `x`, row `y`.
-    pub fn get_pixel(&self, x: usize, y: usize) -> [u8; 3] {
-        let i = self.offset(x, y);
-        [self.data[i], self.data[i + 1], self.data[i + 2]]
-    }
-
-    /// Sets the pixel at column `x`, row `y` to the color `rgb`.
-    pub fn set_pixel(&mut self, x: usize, y: usize, rgb: [u8; 3]) {
-        let i = self.offset(x, y);
-        self.data[i] = rgb[0];
-        self.data[i + 1] = rgb[1];
-        self.data[i + 2] = rgb[2];
-    }
-
-    /// Where the red byte of pixel (x, y) lives in `data`.
-    /// Panics if (x, y) is outside the image.
-    fn offset(&self, x: usize, y: usize) -> usize {
-        assert!(
-            x < self.width && y < self.height,
-            "pixel ({x}, {y}) is outside the {}x{} image",
-            self.width,
-            self.height
-        );
-        (y * self.width + x) * 3
-    }
-
+impl Image<Rgb<u8>> {
     /// Writes the image as a binary PPM (P6) file to `out`.
     pub fn write_ppm(&self, out: &mut impl Write) -> io::Result<()> {
         write!(out, "P6\n{} {}\n255\n", self.width, self.height)?;
-        out.write_all(&self.data)?;
+        out.write_all(self.samples())?;
         Ok(())
     }
 
@@ -73,7 +27,7 @@ impl Image {
     ///
     /// Gray images become RGB images with three equal samples per pixel.
     /// Samples are scaled from 0..=maxval to 0..=255, rounding to nearest.
-    pub fn decode_pnm(bytes: &[u8]) -> Result<Image, ImageError> {
+    pub fn decode_pnm(bytes: &[u8]) -> Result<Self, ImageError> {
         let mut pos = 0;
         let header = parse_header(bytes, &mut pos)?;
         let samples = match header.encoding {
@@ -81,15 +35,15 @@ impl Image {
             Encoding::Binary => read_binary_raster(bytes, &mut pos, &header)?,
         };
 
-        Ok(Image {
-            width: header.width,
-            height: header.height,
-            data: to_rgb8(&samples, &header),
-        })
+        Ok(Image::from_samples(
+            header.width,
+            header.height,
+            &to_rgb8(&samples, &header),
+        ))
     }
 
     // Reads the file at `path` and decodes it with `decode_pnm`.
-    pub fn load_pnm(path: impl AsRef<Path>) -> Result<Image, ImageError> {
+    pub fn load_pnm(path: impl AsRef<Path>) -> Result<Self, ImageError> {
         let bytes = std::fs::read(path)?;
         Image::decode_pnm(&bytes)
     }
@@ -358,7 +312,7 @@ mod ppm_tests {
 
     #[test]
     fn header_is_exact() {
-        let img = Image::new(300, 2);
+        let img: Image<Rgb<u8>> = Image::new(300, 2);
         let mut out = Vec::new();
         img.write_ppm(&mut out).unwrap();
 
@@ -370,10 +324,10 @@ mod ppm_tests {
     #[test]
     fn pixel_bytes_land_at_their_offsets() {
         let mut img = Image::new(4, 3);
-        img.set_pixel(0, 0, [255, 0, 0]);
-        img.set_pixel(3, 0, [0, 255, 0]);
-        img.set_pixel(2, 1, [0, 0, 255]);
-        img.set_pixel(3, 2, [7, 8, 9]);
+        img[(0, 0)] = [255, 0, 0];
+        img[(3, 0)] = [0, 255, 0];
+        img[(2, 1)] = [0, 0, 255];
+        img[(3, 2)] = [7, 8, 9];
         let mut out = Vec::new();
         img.write_ppm(&mut out).unwrap();
 
@@ -389,7 +343,7 @@ mod ppm_tests {
     #[test]
     fn save_ppm_writes_the_same_bytes_to_a_file() {
         let mut img = Image::new(2, 1);
-        img.set_pixel(1, 0, [1, 2, 3]);
+        img[(1, 0)] = [1, 2, 3];
         let mut expected = Vec::new();
         img.write_ppm(&mut expected).unwrap();
 

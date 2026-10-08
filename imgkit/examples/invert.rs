@@ -13,8 +13,8 @@ fn main() -> Result<(), ImageError> {
     let mut img = Image::load_pnm(input)?;
     for y in 0..img.height() {
         for x in 0..img.width() {
-            let [r, g, b] = img.get_pixel(x, y);
-            img.set_pixel(x, y, [255 - r, 255 - g, 255 - b]);
+            let [r, g, b] = img[(x, y)];
+            img[(x, y)] = [255 - r, 255 - g, 255 - b];
         }
     }
     img.save_ppm(output)?;
